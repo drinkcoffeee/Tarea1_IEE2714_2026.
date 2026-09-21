@@ -34,6 +34,35 @@ def rgb_to_hsv(img: np.ndarray) -> np.ndarray:
     return np.stack([H, S, V], axis=-1)
 
 
+def hsv_to_rgb(hsv_img: np.ndarray) -> np.ndarray:
+    """Reconvierte de HSV (H en [0, 360]) a RGB [0, 1]."""
+    H, S, V = hsv_img[:, :, 0], hsv_img[:, :, 1], hsv_img[:, :, 2]
+    C = V * S
+    X = C * (1.0 - np.abs(((H / 60.0) % 2) - 1.0))
+    m = V - C
+
+    R_prime = np.zeros_like(H)
+    G_prime = np.zeros_like(H)
+    B_prime = np.zeros_like(H)
+
+    idx0 = (H >= 0) & (H < 60)
+    idx1 = (H >= 60) & (H < 120)
+    idx2 = (H >= 120) & (H < 180)
+    idx3 = (H >= 180) & (H < 240)
+    idx4 = (H >= 240) & (H < 300)
+    idx5 = (H >= 300) & (H <= 360)
+
+    R_prime[idx0], G_prime[idx0], B_prime[idx0] = C[idx0], X[idx0], 0
+    R_prime[idx1], G_prime[idx1], B_prime[idx1] = X[idx1], C[idx1], 0
+    R_prime[idx2], G_prime[idx2], B_prime[idx2] = 0, C[idx2], X[idx2]
+    R_prime[idx3], G_prime[idx3], B_prime[idx3] = 0, X[idx3], C[idx3]
+    R_prime[idx4], G_prime[idx4], B_prime[idx4] = X[idx4], 0, C[idx4]
+    R_prime[idx5], G_prime[idx5], B_prime[idx5] = C[idx5], 0, X[idx5]
+
+    rgb_img = np.stack([R_prime + m, G_prime + m, B_prime + m], axis=-1)
+    return np.clip(rgb_img, 0.0, 1.0)
+
+
 # ====================================================
 # 2. CONVERSIÓN RGB <-> LCh
 # ====================================================
@@ -47,6 +76,19 @@ def rgb_to_lch(img: np.ndarray) -> np.ndarray:
     h = np.degrees(np.arctan2(b, a)) % 360.0
 
     return np.stack([L, C, h], axis=-1)
+
+
+def lch_to_rgb(lch_img: np.ndarray) -> np.ndarray:
+    """Reconvierte de LCh a RGB [0, 1]."""
+    L, C, h = lch_img[:, :, 0], lch_img[:, :, 1], lch_img[:, :, 2]
+
+    h_rad = np.radians(h)
+    a = C * np.cos(h_rad)
+    b = C * np.sin(h_rad)
+
+    lab = np.stack([L, a, b], axis=-1)
+    rgb_img = color.lab2rgb(lab)
+    return np.clip(rgb_img, 0.0, 1.0)
 
 
 # ====================================================
@@ -81,8 +123,9 @@ def interpolar_factores_m(tonos_imagen, puntos_control):
 def color_saturation(img_rgb, puntos_control, modo='HS'):
     """Modifica la saturación o croma selectivamente según el tono."""
     img_norm = img_rgb.astype(np.float64) / np.max(img_rgb)
+    modo_clean = modo.upper()
 
-    if modo == 'HS':
+    if modo_clean == 'HS':
         hsv = rgb_to_hsv(img_norm)
         H, S, V = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
 
@@ -92,7 +135,7 @@ def color_saturation(img_rgb, puntos_control, modo='HS'):
         hsv_mod = np.stack([H, S_nueva, V], axis=-1)
         return hsv_to_rgb(hsv_mod)
 
-    elif modo == 'LCH':
+    elif modo_clean == 'LCH':
         lch = rgb_to_lch(img_norm)
         L, C, h = lch[:, :, 0], lch[:, :, 1], lch[:, :, 2]
 
@@ -102,8 +145,7 @@ def color_saturation(img_rgb, puntos_control, modo='HS'):
         lch_mod = np.stack([L, C_nuevo, h], axis=-1)
         return lch_to_rgb(lch_mod)
     else:
-        raise ValueError("El modo debe ser 'HS' o 'LCh'.")
-
+        raise ValueError("El modo debe ser 'HS' o 'LCH'.")
 
 # ====================================================
 # 5. BLOQUE DE EJECUCIÓN
