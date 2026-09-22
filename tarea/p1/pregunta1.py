@@ -2,11 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from skimage import color, io
 
-# ====================================================
-# 1. CONVERSIÓN RGB <-> HSV (Manual)
-# ====================================================
 def rgb_to_hsv(img: np.ndarray) -> np.ndarray:
-    """Convierte RGB a HSV (H [0, 360], S [0, 1], V [0, 1])."""
     img_norm = img.astype(np.float64) / np.max(img)
 
     R, G, B = img_norm[:, :, 0], img_norm[:, :, 1], img_norm[:, :, 2]
@@ -35,7 +31,6 @@ def rgb_to_hsv(img: np.ndarray) -> np.ndarray:
 
 
 def hsv_to_rgb(hsv_img: np.ndarray) -> np.ndarray:
-    """Reconvierte de HSV (H en [0, 360]) a RGB [0, 1]."""
     H, S, V = hsv_img[:, :, 0], hsv_img[:, :, 1], hsv_img[:, :, 2]
     C = V * S
     X = C * (1.0 - np.abs(((H / 60.0) % 2) - 1.0))
@@ -62,12 +57,7 @@ def hsv_to_rgb(hsv_img: np.ndarray) -> np.ndarray:
     rgb_img = np.stack([R_prime + m, G_prime + m, B_prime + m], axis=-1)
     return np.clip(rgb_img, 0.0, 1.0)
 
-
-# ====================================================
-# 2. CONVERSIÓN RGB <-> LCh
-# ====================================================
 def rgb_to_lch(img: np.ndarray) -> np.ndarray:
-    """Convierte RGB [0, 1] a LCh (L [0, 100], C [0, ~100+], h [0, 360])."""
     img_norm = img.astype(np.float64) / np.max(img)
     lab = color.rgb2lab(img_norm)
 
@@ -79,7 +69,6 @@ def rgb_to_lch(img: np.ndarray) -> np.ndarray:
 
 
 def lch_to_rgb(lch_img: np.ndarray) -> np.ndarray:
-    """Reconvierte de LCh a RGB [0, 1]."""
     L, C, h = lch_img[:, :, 0], lch_img[:, :, 1], lch_img[:, :, 2]
 
     h_rad = np.radians(h)
@@ -90,10 +79,6 @@ def lch_to_rgb(lch_img: np.ndarray) -> np.ndarray:
     rgb_img = color.lab2rgb(lab)
     return np.clip(rgb_img, 0.0, 1.0)
 
-
-# ====================================================
-# 3. FUNCIONES AUXILIARES (g_m e Interpolación)
-# ====================================================
 def funcion_gm(componente, factor_m, es_lch=False):
     """
     g_m(x) = m * x
@@ -106,7 +91,6 @@ def funcion_gm(componente, factor_m, es_lch=False):
 
 
 def interpolar_factores_m(tonos_imagen, puntos_control):
-    """Interpolación lineal periódica para el tono [0, 360]."""
     tonos = np.array([p[0] for p in puntos_control])
     factores = np.array([p[1] for p in puntos_control])
 
@@ -117,11 +101,7 @@ def interpolar_factores_m(tonos_imagen, puntos_control):
     return np.interp(tonos_imagen, tonos_ext[orden], factores_ext[orden])
 
 
-# ====================================================
-# 4. HERRAMIENTA PRINCIPAL (ColorSaturation)
-# ====================================================
 def color_saturation(img_rgb, puntos_control, modo='HS'):
-    """Modifica la saturación o croma selectivamente según el tono."""
     img_norm = img_rgb.astype(np.float64) / np.max(img_rgb)
     modo_clean = modo.upper()
 
@@ -147,24 +127,18 @@ def color_saturation(img_rgb, puntos_control, modo='HS'):
     else:
         raise ValueError("El modo debe ser 'HS' o 'LCH'.")
 
-# ====================================================
-# 5. BLOQUE DE EJECUCIÓN
-# ====================================================
+
 if __name__ == '__main__':
     archivo_imagen = 'P1_IMG_2402.tif'
     imag = io.imread(archivo_imagen)
 
-    # Normalización usando np.max(imag)
     img_norm = imag.astype(np.float64) / np.max(imag)
 
-    # Puntos de control: (Tono en grados [0-360], Factor m)
     puntos_control = [(0.0, 1.0), (60.0, 2.5), (200.0, 0.1), (360.0, 1.0)]
 
-    # Procesamiento en ambos modos
     res_hs = color_saturation(img_norm, puntos_control, modo='HS')
     res_lch = color_saturation(img_norm, puntos_control, modo='LCH')
 
-    # Visualización comparativa
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     axes[0].imshow(img_norm)
     axes[0].set_title("Original")
@@ -181,4 +155,3 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.savefig('resultado_pregunta1.png', dpi=300)
     plt.show()
-    print("¡Proceso completado con éxito!")

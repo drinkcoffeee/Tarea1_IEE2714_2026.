@@ -2,9 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from skimage import color, io
 
-# ====================================================
-# 1. FUNCIONES BASE
-# ====================================================
+
 def rgb_to_hsv(img: np.ndarray) -> np.ndarray:
     img_norm = img.astype(np.float64) / np.max(img)
     R, G, B = img_norm[:, :, 0], img_norm[:, :, 1], img_norm[:, :, 2]
@@ -87,9 +85,6 @@ def color_saturation(img_rgb, puntos_control, modo='HS'):
         lab_mod = np.stack([L, croma_nuevo * np.cos(tono_rad), croma_nuevo * np.sin(tono_rad)], axis=-1)
         return np.clip(color.lab2rgb(lab_mod), 0.0, 1.0)
 
-# ====================================================
-# 2. DEFINICIÓN DE LAS 3 CONFIGURACIONES PREDICHO POR LA PAUTA
-# ====================================================
 configuraciones = [
     {
         "nombre": "1. Amplificación Selectiva (Tonos Cálidos)",
@@ -108,15 +103,12 @@ configuraciones = [
     }
 ]
 
-# ====================================================
-# 3. GENERACIÓN DE LAS FIGURAS
-# ====================================================
+
 def ejecutar_experimento_completo(archivo_imagen):
     img_raw = io.imread(archivo_imagen)
     img_norm = img_raw.astype(np.float64) / np.max(img_raw)
     tonos_continuos = np.linspace(0, 360, 361)
 
-    # FIGURA A: Las 3 Curvas m(h) juntas
     fig_curvas, axes_curvas = plt.subplots(1, 3, figsize=(18, 4))
     
     for idx, cfg in enumerate(configuraciones):
@@ -139,7 +131,6 @@ def ejecutar_experimento_completo(archivo_imagen):
     print("-> Gráfico de las 3 curvas m(h) guardado como 'grafico_3_curvas_m.png'.")
     plt.show()
 
-    # FIGURA B: Resultados visuales (Original vs HS vs LCh para las 3 configuraciones)
     fig_img, axes_img = plt.subplots(3, 3, figsize=(15, 12))
 
     for row, cfg in enumerate(configuraciones):
@@ -164,5 +155,5 @@ def ejecutar_experimento_completo(archivo_imagen):
     plt.show()
 
 if __name__ == '__main__':
-    nombre_imagen = 'P1_IMG_2402.tif'  # Reemplaza por tu archivo de imagen
+    nombre_imagen = 'P1_IMG_2402.tif'  
     ejecutar_experimento_completo(nombre_imagen)

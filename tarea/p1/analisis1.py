@@ -2,9 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from skimage import color, io
 
-# ====================================================
-# 1. FUNCIONES BASE Y SATURACIÓN (Pregunta 1)
-# ====================================================
+
 def rgb_to_hsv(img: np.ndarray) -> np.ndarray:
     img_norm = img.astype(np.float64) / np.max(img)
     R, G, B = img_norm[:, :, 0], img_norm[:, :, 1], img_norm[:, :, 2]
@@ -87,22 +85,18 @@ def color_saturation(img_rgb, puntos_control, modo='HS'):
         lab_mod = np.stack([L, croma_nuevo * np.cos(tono_rad), croma_nuevo * np.sin(tono_rad)], axis=-1)
         return np.clip(color.lab2rgb(lab_mod), 0.0, 1.0)
 
-# ====================================================
-# 2. EXPERIMENTACIÓN Y GENERACIÓN DE FIGURAS
-# ====================================================
+
 def correr_analisis(archivo_imagen):
     print(f"Cargando imagen '{archivo_imagen}'...")
     img_raw = io.imread(archivo_imagen)
     img_norm = img_raw.astype(np.float64) / np.max(img_raw)
 
-    # 1. Configuraciones de prueba (Puntos de Control)
     cfg_amplificar = [("Amplificación (Cálidos)", [(0, 1.0), (40, 2.5), (80, 2.5), (120, 1.0), (360, 1.0)])]
     cfg_atenuar   = [("Atenuación (Fríos)",     [(0, 1.0), (160, 1.0), (200, 0.05), (260, 0.05), (300, 1.0), (360, 1.0)])]
     cfg_mixta     = [("Combinada (Mixta)",      [(0, 0.2), (60, 2.2), (120, 2.2), (220, 0.1), (360, 0.2)])]
 
     experimentos = cfg_amplificar + cfg_atenuar + cfg_mixta
 
-    # Figura 1: Comparación de los 3 casos
     fig, axes = plt.subplots(3, 3, figsize=(15, 11))
 
     for row, (nombre_cfg, puntos) in enumerate(experimentos):
@@ -125,9 +119,8 @@ def correr_analisis(archivo_imagen):
     plt.tight_layout()
     plt.savefig('analisis_experimentos_p1.png', dpi=300)
     print("-> Imagen 'analisis_experimentos_p1.png' guardada.")
-    plt.show()  # Muestra la figura en pantalla
+    plt.show()  
 
-    # Figura 2: Prueba de Clipping / Desbordamiento (m = 4.5)
     print("Procesando prueba de Clipping (m = 4.5)...")
     cfg_clipping = [(0, 1.0), (50, 4.5), (100, 4.5), (360, 1.0)]
     clip_hs = color_saturation(img_norm, cfg_clipping, modo='HS')
@@ -151,10 +144,7 @@ def correr_analisis(archivo_imagen):
     print("-> Imagen 'analisis_clipping_p1.png' guardada.")
     plt.show()  # Muestra la figura en pantalla
 
-# ====================================================
-# BLOQUE PRINCIPAL (Aquí se ejecuta la función)
-# ====================================================
+
 if __name__ == '__main__':
-    # Cambia esto al nombre exacto de la imagen en tu carpeta
     nombre_imagen = 'P1_IMG_2402.tif' 
     correr_analisis(nombre_imagen)

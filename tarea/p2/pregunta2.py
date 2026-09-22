@@ -1,102 +1,185 @@
 import numpy as np
-from skimage import io, color, img_as_ubyte
+import matplotlib.pyplot as plt
+from skimage import io, color
+import cv2
 
-def ecualizacion_local_malla(img_rgb, tile_size=(64, 64), stride=32):
-    """
-    Ecualización local de histograma basada en una malla de regiones con interpolación bilineal.
-    """
-    # 1. Convertir a escala de grises [0, 255]
-    if img_rgb.ndim == 3:
-        img_gray = color.rgb2gray(img_rgb)
+
+def cargar_imagen(ruta_imagen: str) -> np.ndarray:
+   
+    img_raw = io.imread(ruta_imagen)
+    if img_raw.ndim == 3:
+        if img_raw.shape[2] == 4:
+            img_raw = img_raw[:, :, :3]
+        img_gray = color.rgb2gray(img_raw)
     else:
-        img_gray = img_rgb.astype(np.float64) / np.max(img_rgb)
+        img_gray = img_raw.astype(np.float64)
     
-    img_u8 = img_as_ubyte(img_gray)
-    H, W = img_u8.shape
-    th, tw = tile_size
+    # Normalización robusta a uint8 [0, 255]
+    min_val, max_val = np.min(img_gray), np.max(img_gray)
+    if max_val > min_val:
+        img_uint8 = (255.0 * (img_gray - min_val) / (max_val - min_val)).astype(np.uint8)
+    else:
+        img_uint8 = np.zeros_like(img_gray, dtype=np.uint8)
+        
+    return img_uint8
 
-    # Si el tamaño del tile cubre toda la imagen, actúa como ecualización global
-    if th >= H and tw >= W:
-        hist, _ = np.histogram(img_u8.flatten(), bins=256, range=(0, 256))
-        cdf = hist.cumsum()
-        cdf_normalized = np.round(255 * cdf / cdf[-1]).astype(np.uint8)
-        return cdf_normalized[img_u8]
 
-    # 2. Generar centros de la malla
-    y_centers = list(range(th // 2, H, stride))
-    x_centers = list(range(tw // 2, W, stride))
+def calcular_cdf_region(region: np.ndarray, nbins: int = 256, clip_limit: float = None) -> np.ndarray:
     
-    # Asegurar que los bordes extremos estén cubiertos
-    if y_centers[-1] != H - 1:
-        y_centers.append(H - 1)
-    if x_centers[-1] != W - 1:
-        x_centers.append(W - 1)
+    hist, _ = np.histogram(region.ravel(), bins=nbins, range=(0, 256))
+    
+    if clip_limit is not None and clip_limit > 0:
+        limit = int(clip_limit * (region.size / nbins))
+        limit = max(1, limit)
+        
+        exceso = np.maximum(hist - limit, 0)
+        hist = np.minimum(hist, limit)
+        
+        redistribucion = exceso.sum() // nbins
+        resto = exceso.sum() % nbins
+        hist += redistribucion
+        hist[:resto] += 1
 
-    # 3. Calcular la CDF para cada región (tile) en la malla
-    cdf_list = []
-    for yc in y_centers:
-        row_cdfs = []
-        for xc in x_centers:
-            y1 = max(0, yc - th // 2)
-            y2 = min(H, yc + th // 2)
-            x1 = max(0, xc - tw // 2)
-            x2 = min(W, xc + tw // 2)
+    cdf = hist.cumsum()
+    cdf_min = cdf[cdf > 0].min() if np.any(cdf > 0) else 0
+    denominador = region.size - cdf_min
+    
+    if denominador <= 0:
+        return np.arange(nbins, dtype=np.uint8)
+    
+    T = np.round((cdf - cdf_min) / denominador * (nbins - 1))
+    return np.clip(T, 0, nbins - 1).astype(np.uint8)
+
+def ecualizacion_local_malla(img: np.ndarray, 
+                                region_size: tuple = (64, 64), 
+                                step_size: tuple = (32, 32), 
+                                nbins: int = 256, 
+                                clip_limit: float = None) -> np.ndarray:
+ 
+    img_gray = img.copy()
+    H, W = img_gray.shape
+    Rh, Rw = region_size
+    Dh, Dw = step_size
+
+    if Rh >= H and Rw >= W:
+        T_global = calcular_cdf_region(img_gray, nbins=nbins, clip_limit=None)
+        return T_global[img_gray]
+
+    centers_y = np.arange(Rh // 2, H, Dh)
+    centers_x = np.arange(Rw // 2, W, Dw)
+    
+    if len(centers_y) == 0 or centers_y[-1] < H - Rh // 2:
+        centers_y = np.append(centers_y, H - Rh // 2) if len(centers_y) > 0 else np.array([H // 2])
+    if len(centers_x) == 0 or centers_x[-1] < W - Rw // 2:
+        centers_x = np.append(centers_x, W - Rw // 2) if len(centers_x) > 0 else np.array([W // 2])
+
+    n_rows = len(centers_y)
+    n_cols = len(centers_x)
+
+
+    cdfs = np.zeros((n_rows, n_cols, nbins), dtype=np.uint8)
+    for r in range(n_rows):
+        cy = centers_y[r]
+        r0 = max(0, cy - Rh // 2)
+        r1 = min(H, cy + Rh // 2)
+        for c in range(n_cols):
+            cx = centers_x[c]
+            c0 = max(0, cx - Rw // 2)
+            c1 = min(W, cx + Rw // 2)
             
-            patch = img_u8[y1:y2, x1:x2]
-            hist, _ = np.histogram(patch.flatten(), bins=256, range=(0, 256))
-            cdf = hist.cumsum()
-            if cdf[-1] > 0:
-                cdf_norm = 255.0 * cdf / cdf[-1]
-            else:
-                cdf_norm = np.arange(256)
-            row_cdfs.append(cdf_norm)
-        cdf_list.append(row_cdfs)
+            tile = img_gray[r0:r1, c0:c1]
+            cdfs[r, c] = calcular_cdf_region(tile, nbins=nbins, clip_limit=clip_limit)
 
-    # 4. Reconstrucción mediante interpolación bilineal por píxel
-    salida = np.zeros_like(img_u8, dtype=np.float64)
-    
+    img_out = np.zeros_like(img_gray)
+
     for y in range(H):
-        # Encontrar los índices de los centros en Y
-        y_idx = 0
-        while y_idx < len(y_centers) - 1 and y_centers[y_idx + 1] <= y:
-            y_idx += 1
-        y0, y1 = y_centers[max(0, y_idx)], y_centers[min(len(y_centers) - 1, y_idx + 1)]
+        r_idx = np.searchsorted(centers_y, y) - 1
+        r0 = int(np.clip(r_idx, 0, n_rows - 2))
+        r1 = r0 + 1
+
+        dy = (y - centers_y[r0]) / (centers_y[r1] - centers_y[r0] + 1e-10)
+        dy = np.clip(dy, 0.0, 1.0)
 
         for x in range(W):
-            # Encontrar los índices de los centros en X
-            x_idx = 0
-            while x_idx < len(x_centers) - 1 and x_centers[x_idx + 1] <= x:
-                x_idx += 1
-            x0, x1 = x_centers[max(0, x_idx)], x_centers[min(len(x_centers) - 1, x_idx + 1)]
+            v = img_gray[y, x]
 
-            val = img_u8[y, x]
+            c_idx = np.searchsorted(centers_x, x) - 1
+            c0 = int(np.clip(c_idx, 0, n_cols - 2))
+            c1 = c0 + 1
 
-            if y0 == y1 and x0 == x1:
-                salida[y, x] = cdf_list[y_idx][x_idx][val]
-            elif y0 == y1:
-                # Interpolación lineal horizontal
-                factor = (x - x0) / (x1 - x0) if x1 != x0 else 0
-                v0 = cdf_list[y_idx][x_idx][val]
-                v1 = cdf_list[y_idx][x_idx + 1][val]
-                salida[y, x] = (1 - factor) * v0 + factor * v1
-            elif x0 == x1:
-                # Interpolación lineal vertical
-                factor = (y - y0) / (y1 - y0) if y1 != y0 else 0
-                v0 = cdf_list[y_idx][x_idx][val]
-                v1 = cdf_list[y_idx + 1][x_idx][val]
-                salida[y, x] = (1 - factor) * v0 + factor * v1
-            else:
-                # Interpolación bilineal completa de las 4 celdas vecinas
-                r1 = (x1 - x) / (x1 - x0) * cdf_list[y_idx][x_idx][val] + (x - x0) / (x1 - x0) * cdf_list[y_idx][x_idx + 1][val]
-                r2 = (x1 - x) / (x1 - x0) * cdf_list[y_idx + 1][x_idx][val] + (x - x0) / (x1 - x0) * cdf_list[y_idx + 1][x_idx + 1][val]
-                factor_y = (y - y0) / (y1 - y0)
-                salida[y, x] = (1 - factor_y) * r1 + factor_y * r2
+            dx = (x - centers_x[c0]) / (centers_x[c1] - centers_x[c0] + 1e-10)
+            dx = np.clip(dx, 0.0, 1.0)
 
-    return np.clip(salida, 0, 255).astype(np.uint8)
+    
+            t00 = cdfs[r0, c0, v]
+            t01 = cdfs[r0, c1, v]
+            t10 = cdfs[r1, c0, v]
+            t11 = cdfs[r1, c1, v]
 
-# Bloque de ejecución principal
+           
+            top = (1 - dx) * t00 + dx * t01
+            bot = (1 - dx) * t10 + dx * t11
+            val_final = (1 - dy) * top + dy * bot
+
+            img_out[y, x] = np.clip(np.round(val_final), 0, 255)
+
+    return img_out
+
+def ejecutar_experimentos_p2(ruta_imagen: str):
+    print(f"Vicky, procesando la imagen: '{ruta_imagen}'...")
+    img_uint8 = cargar_imagen(ruta_imagen)
+    H, W = img_uint8.shape
+
+    print("1/4 Calculando Ecualización Global Clásica...")
+    global_propia = ecualizacion_local_malla(img_uint8, region_size=(H, W), step_size=(H, W))
+
+    print("2/4 Calculando Ecualización Local No Limitada...")
+    local_nolim = ecualizacion_local_malla(img_uint8, region_size=(64, 64), step_size=(32, 32), clip_limit=None)
+
+    print("3/4 Calculando Propuesta con Control de Contraste...")
+    local_lim_propia = ecualizacion_local_malla(img_uint8, region_size=(64, 64), step_size=(32, 32), clip_limit=3.0)
+
+    print("4/4 Calculando CLAHE de OpenCV (Referencia)...")
+    clahe_cv2 = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    clahe_ref = clahe_cv2.apply(img_uint8)
+
+    fig, axes = plt.subplots(2, 3, figsize=(16, 10))
+
+    axes[0, 0].imshow(img_uint8, cmap='gray')
+    axes[0, 0].set_title("1. Imagen Original")
+    axes[0, 0].axis('off')
+
+    axes[0, 1].imshow(global_propia, cmap='gray')
+    axes[0, 1].set_title("2. Global Clásica (1 Región HxW)")
+    axes[0, 1].axis('off')
+
+    axes[0, 2].imshow(local_nolim, cmap='gray')
+    axes[0, 2].set_title("3. Local No Limitada\n(Region=64x64, Step=32x32)")
+    axes[0, 2].axis('off')
+
+    axes[1, 0].imshow(local_lim_propia, cmap='gray')
+    axes[1, 0].set_title("4. Propuesta Limitada\n(Clip Limit = 3.0)")
+    axes[1, 0].axis('off')
+
+    axes[1, 1].imshow(clahe_ref, cmap='gray')
+    axes[1, 1].set_title("5. CLAHE Benchmark (OpenCV)")
+    axes[1, 1].axis('off')
+
+    # Histograma Comparativo
+    axes[1, 2].hist(local_nolim.ravel(), bins=100, alpha=0.5, label='No Limitada', color='red')
+    axes[1, 2].hist(local_lim_propia.ravel(), bins=100, alpha=0.5, label='Propuesta Limitada', color='green')
+    axes[1, 2].set_title("Histograma: No Limitada vs Limitada")
+    axes[1, 2].set_xlabel("Nivel de Gris")
+    axes[1, 2].set_ylabel("Frecuencia")
+    axes[1, 2].legend()
+
+    plt.tight_layout()
+    plt.savefig('resultado_pregunta2.png', dpi=300)
+    print("-> ¡Proceso terminado! Imagen guardada como 'resultado_pregunta2.png'.")
+    plt.show()
+
+
 if __name__ == '__main__':
-    imagen = io.imread('P2_IMG_2423.tif')
-    resultado_local = ecualizacion_local_malla(imagen, tile_size=(64, 64), stride=32)
-    io.imsave('resultado_pregunta2_local.png', resultado_local)
-    print("¡Ecualización local completada y guardada exitosamente!")
+    
+    nombre_imagen = 'P2_IMG_2423.tif'
+    ejecutar_experimentos_p2(nombre_imagen)
