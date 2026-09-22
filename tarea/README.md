@@ -2,7 +2,10 @@
 entrega de la tarea 1 de IEE2714 
 ```
 estructura de repositorio 
-├───bono      No terminado 
+
+para cada pregunta tiene una carpeta correspondiente en donde tiene el main principal , paar este reposictorio de trabajo con las librerias de :numpy, matplotlib, skimage, image  
+
+├───bono     ( No terminado )
 │       bono.py
 │       P4_CRW_4866_CFA.tif
 │       P4_IMG_2267_CFA.tif
