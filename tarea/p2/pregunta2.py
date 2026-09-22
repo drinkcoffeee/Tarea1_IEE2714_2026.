@@ -175,7 +175,6 @@ def ejecutar_experimentos_p2(ruta_imagen: str):
 
     plt.tight_layout()
     plt.savefig('resultado_pregunta2.png', dpi=300)
-    print("-> ¡Proceso terminado! Imagen guardada como 'resultado_pregunta2.png'.")
     plt.show()
 
 

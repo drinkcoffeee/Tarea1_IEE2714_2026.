@@ -3,12 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 
-# =============================================================================
-# 1. FUNCIONES PRINCIPALES DE CARGA Y REESCALADO
-# =============================================================================
+
 
 def cargar_imagen_tif(ruta):
-    """Carga una imagen .tif, .tiff (o .jpg/.png) a un arreglo numpy."""
     if not os.path.exists(ruta):
         raise FileNotFoundError(f"No se encontró el archivo: {ruta}")
         
@@ -22,7 +19,6 @@ def cargar_imagen_tif(ruta):
 
 
 def reescalar_imagen(img, s, modo='bilinear'):
-    """Reescala la imagen por un factor s entre 0.5 y 2.0."""
     if s < 0.5 or s > 2.0:
         raise ValueError("El factor de escala s debe estar entre 0.5 y 2.0")
         
@@ -34,13 +30,11 @@ def reescalar_imagen(img, s, modo='bilinear'):
         
     h_in, w_in, canales = img_trabajo.shape
     
-    # 1. Tamaño de salida con redondeo al entero más cercano
     h_out = int(round(h_in * s))
     w_out = int(round(w_in * s))
     
     i_out, j_out = np.meshgrid(np.arange(h_out), np.arange(w_out), indexing='ij')
     
-    # 2. Mapeo con convención de píxeles centrados
     y_in = (i_out + 0.5) / s - 0.5
     x_in = (j_out + 0.5) / s - 0.5
     
@@ -89,9 +83,6 @@ def reescalar_imagen(img, s, modo='bilinear'):
     return salida
 
 
-# =============================================================================
-# 2. EXPERIMENTOS Y MOSTRAR EN PANTALLA
-# =============================================================================
 
 def ejecutar_experimentos(ruta_imagen, roi=None):
     print("\n" + "="*80)
@@ -108,7 +99,6 @@ def ejecutar_experimentos(ruta_imagen, roi=None):
     else:
         y1, y2, x1, x2 = roi
 
-    # Exp 1-4: Comparación Nearest vs Bilinear con ZOOMS
     factores = [0.63, 0.85, 1.37, 1.74]
     fig, axes = plt.subplots(len(factores), 3, figsize=(11, 11))
     fig.suptitle("Experimentos 1-4: Comparación con Recortes Ampliados (ZOOM)", fontsize=12)
@@ -133,9 +123,9 @@ def ejecutar_experimentos(ruta_imagen, roi=None):
             ax.axis('off')
 
     plt.tight_layout()
-    plt.show()  # Se muestra en pantalla directamente
+    plt.show()  
 
-    # Exp 5: Reducción y reconstrucción
+    
     s_down = 0.55
     s_up = 1.0 / s_down
     
@@ -169,7 +159,6 @@ def ejecutar_experimentos(ruta_imagen, roi=None):
     plt.tight_layout()
     plt.show()
 
-    # Exp 6: Reescalados sucesivos vs directo
     s1, s2 = 0.72, 0.81
     s_directo = s1 * s2
     
@@ -203,74 +192,11 @@ def ejecutar_experimentos(ruta_imagen, roi=None):
     plt.show()
 
 
-# =============================================================================
-# 3. IMPRIMIR RESPUESTAS POR CONSOLA
-# =============================================================================
-
-def imprimir_preguntas_guiadas():
-    print("\n" + "="*80)
-    print(" PREGUNTAS GUIADAS PREGUNTA 3 - RESPUESTAS " )
-    print("="*80 + "\n")
-    
-    print("1. ¿Para un píxel de salida de coordenadas (i,j), cómo calcula su posición correspondiente en la imagen original?")
-    print("   -> Se aplica el mapeo continuo de píxeles centrados:")
-    print("      y_in = (i + 0.5) / s - 0.5")
-    print("      x_in = (j + 0.5) / s - 0.5\n")
-
-    print("2. ¿Qué criterio utiliza para determinar las dimensiones de salida cuando el tamaño original multiplicado por s no es entero?")
-    print("   -> Redondeo al entero más cercano con round():")
-    print("      H_out = int(round(H_in * s))")
-    print("      W_out = int(round(W_in * s))\n")
-
-    print("3. En el modo bilineal, ¿cómo determina los cuatro píxeles vecinos de una posición no entera?")
-    print("   -> Esquina superior izquierda usando floor(): i0 = floor(y_in), j0 = floor(x_in)")
-    print("      Los 4 vecinos son: (i0, j0), (i0, j0+1), (i0+1, j0) e (i0+1, j0+1).\n")
-
-    print("4. ¿Cómo calcula los cuatro pesos de interpolación y por qué su suma debe ser igual a uno?")
-    print("   -> Siendo dy = y_in - i0 y dx = x_in - j0:")
-    print("      w00 = (1 - dy)*(1 - dx),  w01 = (1 - dy)*dx")
-    print("      w10 = dy*(1 - dx),        w11 = dy*dx")
-    print("   -> La suma vale 1.0 para conservar la iluminación media de la imagen sin aclararla u oscurecerla.\n")
-
-    print("5. ¿Qué ocurre con los pesos cuando la posición calculada coincide exactamente con un píxel de la imagen original?")
-    print("   -> dy = 0 y dx = 0. Por ende, w00 = 1.0 y los demás valen 0.0, devolviendo el color exacto original.\n")
-
-    print("6. ¿Cómo trata una posición cercana al borde, donde alguno de los cuatro vecinos podría quedar fuera de la imagen?")
-    print("   -> Mediante clamping (np.clip), forzando las coordenadas que se salen al borde válido más cercano (0 o H-1 / W-1).\n")
-
-    print("7. Ejemplo numérico paso a paso:")
-    print("   - Factor s = 1.5")
-    print("   - Píxel de salida: (i, j) = (2, 3)")
-    print("   - Coordenadas de entrada: y_in = (2 + 0.5)/1.5 - 0.5 = 1.1667")
-    print("                             x_in = (3 + 0.5)/1.5 - 0.5 = 1.8333")
-    print("   - Vecinos: i0 = 1, j0 = 1 => (1,1), (1,2), (2,1), (2,2)")
-    print("   - Fracciones: dy = 0.1667, dx = 0.8333")
-    print("   - Pesos: w00 = 0.1389, w01 = 0.6944, w10 = 0.0278, w11 = 0.1389 (Suma = 1.0)")
-    print("   - Si I(1,1)=100, I(1,2)=200, I(2,1)=50, I(2,2)=150")
-    print("   - Resultado = 0.1389(100) + 0.6944(200) + 0.0278(50) + 0.1389(150) = 175.0\n")
-
-    print("8. ¿Qué partes de su código son comunes a vecino más cercano y bilineal y cuáles cambian entre ambos modos?")
-    print("   -> COMÚN: Verificación de parámetros, tamaño de salida, grilla meshgrid y mapeo flotante continuo.")
-    print("   -> DIFIERE: Nearest hace round() directo e indexa; Bilinear calcula 4 vecinos con floor(), distancias dy/dx, 4 pesos y combinación lineal.\n")
-
-    print("9. ¿Por qué varios reescalados consecutivos no producen, en general, el mismo resultado que un único reescalado equivalente?")
-    print("   -> 1. Suavizado acumulado: Cada paso bilineal filtra las frecuencias altas repetidamente.")
-    print("   -> 2. Cuantización espacial: Los redondeos a enteros en dimensiones intermedias alteran la grilla de coordenadas.\n")
-
-
-# =============================================================================
-# BLOQUE PRINCIPAL
-# =============================================================================
-
 if __name__ == "__main__":
-    # Nombre de tu archivo de imagen
     RUTA_IMAGEN = "P3_IMG_2387_crop.tif" 
     
-    # Recorte para enfocar la zona del tigre con detalles (y_min, y_max, x_min, x_max)
     ROI_ZOOM = (600, 1100, 400, 900) 
     
-    # 1. Mostrar las imágenes de los experimentos en ventanas
     ejecutar_experimentos(RUTA_IMAGEN, roi=ROI_ZOOM)
     
-    # 2. Imprimir todo el texto y las respuestas directo en la consola
-    imprimir_preguntas_guiadas()
+    

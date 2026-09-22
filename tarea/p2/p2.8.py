@@ -94,5 +94,3 @@ plt.axis('off')
 
 plt.tight_layout()
 plt.show()
-
-print("¡Listo! Tu imagen procesada se guardó como 'resultado_tarea.png'.")
